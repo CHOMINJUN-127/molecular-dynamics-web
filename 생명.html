@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Protein Visualizer & Structural Biology Lab</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <style>
+        :root {
+            --bg-dark: #0f1015;
+            --panel-bg: rgba(20, 21, 26, 0.9);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --accent: #4f46e5;
+            --accent-hover: #6366f1;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --sidebar-width: 380px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* 크기 조절이 가능한 가변형 좌측 사이드바 패널 */
+        #left-sidebar {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: var(--sidebar-width);
+            min-width: 320px;
+            max-width: 600px;
+            bottom: 45px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            padding-right: 15px;
+        }
+
+        #sidebar-resizer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 6px;
+            height: 100%;
+            cursor: ew-resize;
+            background: transparent;
+            transition: background 0.2s;
+        }
+        #sidebar-resizer:hover, .resizing #sidebar-resizer {
+            background: var(--accent);
+        }
+
+        #right-sidebar {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 340px;
+            bottom: 45px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        .category-block {
+            margin-bottom: 16px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .category-trigger {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.04);
+            border: none;
+            color: var(--text-main);
+            padding: 12px 14px;
+            text-align: left;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .category-trigger:hover { background: rgba(255, 255, 255, 0.08); }
+
+        .sub-panel {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+
+        .btn-sub {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: var(--text-main);
+            padding: 8px 4px;
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .btn-sub:hover {
+            background: var(--accent);
+            border-color: var(--accent-hover);
+        }
+
+        .btn-all {
+            grid-column: span 3;
+            background: rgba(79, 70, 229, 0.2);
+            border: 1px solid var(--accent);
+            font-weight: bold;
+        }
+
+        .btn-all:hover {
+            background: var(--accent);
+        }
+
+        .btn-action {
+            width: 100%;
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .btn-action:hover { background: #10b981; }
+
+        #bottom-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 30px;
+            background: rgba(10, 10, 12, 0.95);
+            border-top: 1px solid var(--panel-border);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 12px;
+            color: var(--text-muted);
+            justify-content: space-between;
+        }
+
+        .info-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+        .info-table th, .info-table td { padding: 6px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+        .info-table th { color: var(--text-muted); font-weight: 500; }
+        
+        .section-title {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            border-left: 3px solid var(--accent);
+            padding-left: 8px;
+        }
+
+        #reaction-toast {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(5, 150, 105, 0.95);
+            border: 1px solid #10b981;
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 100;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            display: none;
+            text-align: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+                /* 우측 상단 페이지 이동 버튼 그룹 스타일 */
+        #navGroup{top:14px;right:14px;width:310px;height:64px;display:flex;align-items:center;justify-content:space-around;padding:0 10px}
+        #navGroup button{flex:1;margin:0 4px;font-weight:bold;font-size:15px;background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.4)}
+        #navGroup button:hover{background:var(--accent);color:#020617;box-shadow:0 0 12px var(--accent)}
+
+        #left{top:92px;left:14px;bottom:92px;width:310px;padding:16px;overflow:auto}
+        /* 우측 링크 버튼 때문에 상단 겹침 방지를 위해 top 위치를 92px에서 160px로 조정 */
+        #right{top:160px;right:14px;bottom:92px;width:310px;padding:16px;overflow:auto}
+        #bottom{left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:10px 14px}
+
+        @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    <div id="reaction-toast"></div>
+
+    <div id="left-sidebar">
+        <div id="sidebar-resizer"></div>
+        <div class="sidebar-content">
+            
+            <div style="margin-bottom:20px; text-align:center;">
+                <h3 style="font-size:16px; font-weight:700; color:#fff;">PROTEIN LAB ANALYSIS</h3>
+                <p style="font-size:11px; color:var(--text-muted);">연구용 거대분자 시각화 가속 엔진</p>
+                <button class="btn-sub btn-all" style="margin-top:10px; padding:10px;" onclick="resetToGlobalView()">초기 원형 전체 구조 보기 (Reset)</button>
+            </div>
+
+        <div id="navGroup" class="glass">
+            <button onclick="location.href='index.html'">1</button>
+            <button onclick="location.href='생명.html'">2</button>
+            <button onclick="location.href='세포막.html'">3</button>
+        </div>
+
+            <div class="category-block">
+                <button class="category-trigger" onclick="toggleCategory('panel-elements')">
+                    <span>1. 원소 종류 (Elements Configuration)</span>
+                    <span>▼</span>
+                </button>
+                <div class="sub-panel" id="panel-elements">
+                    <p style="font-size:11px; color:var(--text-muted);">특정 원자 소스를 추적 필터링 처리합니다.</p>
+                    <div class="button-grid">
+                        <button class="btn-sub" onclick="filterByElement('C')">탄소 (Carbon)</button>
+                        <button class="btn-sub" onclick="filterByElement('H')">수소 (Hydrogen)</button>
+                        <button class="btn-sub" onclick="filterByElement('O')">산소 (Oxygen)</button>
+                        <button class="btn-sub" onclick="filterByElement('N')">질소 (Nitrogen)</button>
+                        <button class="btn-sub" onclick="filterByElement('S')">황 (Sulfur)</button>
+                        <button class="btn-sub" onclick="filterByElement('SE')">셀레늄 (Selenium)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="category-block">
+                <button class="category-trigger" onclick="toggleCategory('panel-amino-acids')">
+                    <span>2. 아미노산 화학 속성 분류 (Amino Acids)</span>
+                    <span>▼</span>
+                </button>
+                <div class="sub-panel" id="panel-amino-acids" style="display:none;">
+                    
+                    <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:8px;">
+                        <span style="font-size:12px; color:#f43f5e; font-weight:600;">비극성 (Nonpolar / Hydrophobic)</span>
+                        <div class="button-grid" style="margin-top:5px;">
+                            <button class="btn-sub btn-all" onclick="filterByAminoGroup(['GLY','ALA','VAL','LEU','ILE','MET','PRO','PHE','TRP'])">비극성 전체 선택 (All Nonpolar)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('GLY')">Gly (글리신)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('ALA')">Ala (알라닌)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('VAL')">Val (발린)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('LEU')">Leu (류신)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('ILE')">Ile (아이소류신)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('MET')">Met (메티오닌)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('PRO')">Pro (프롤린)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('PHE')">Phe (페닐알라닌)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('TRP')">Trp (트립토판)</button>
+                        </div>
+                    </div>
+
+                    <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:8px; margin-top:5px;">
+                        <span style="font-size:12px; color:#38bdf8; font-weight:600;">극성 (Polar Uncharged)</span>
+                        <div class="button-grid" style="margin-top:5px;">
+                            <button class="btn-sub btn-all" onclick="filterByAminoGroup(['SER','THR','ASN','GLN','TYR','CYS'])">극성 전체 선택 (All Polar)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('SER')">Ser (세린)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('THR')">Thr (트레오닌)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('ASN')">Asn (아스파라긴)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('GLN')">Gln (글루타민)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('TYR')">Tyr (티로신)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('CYS')">Cys (시스테인)</button>
+                        </div>
+                    </div>
+
+                    <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:8px; margin-top:5px;">
+                        <span style="font-size:12px; color:#eab308; font-weight:600;">산성 (Acidic / Negatively Charged)</span>
+                        <div class="button-grid" style="margin-top:5px;">
+                            <button class="btn-sub btn-all" onclick="filterByAminoGroup(['ASP','GLU'])">산성 전체 선택 (All Acidic)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('ASP')">Asp (아스파트산)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('GLU')">Glu (글루탐산)</button>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:5px;">
+                        <span style="font-size:12px; color:#a855f7; font-weight:600;">염기성 (Basic / Positively Charged)</span>
+                        <div class="button-grid" style="margin-top:5px;">
+                            <button class="btn-sub btn-all" onclick="filterByAminoGroup(['LYS','ARG','HIS'])">염기성 전체 선택 (All Basic)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('LYS')">Lys (라이신)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('ARG')">Arg (아르기닌)</button>
+                            <button class="btn-sub" onclick="filterBySingleResidue('HIS')">His (히스티딘)</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="category-block">
+                <button class="category-trigger" onclick="toggleCategory('panel-peptide-bond')">
+                    <span>3. 펩타이드 결합 (Peptide Bond Formation)</span>
+                    <span>▼</span>
+                </button>
+                <div class="sub-panel" id="panel-peptide-bond" style="display:none;">
+                    <p style="font-size:11px; color:var(--text-muted); line-height:1.4;">
+                        아미노산 사슬이 연결될 때 <br>
+                        <strong>-COOH (카르복실기)</strong>와 <strong>-NH₂ (아미노기)</strong>가 반응하여 
+                        <strong>-CO-NH- (펩타이드 결합)</strong>을 형성하고 <strong>H₂O</strong> 분자가 이탈하는 
+                        <span style="color:#10b981; font-weight:bold;">탈수축합(Dehydration Synthesis)</span> 메커니즘을 트리거합니다.
+                    </p>
+                    <button class="btn-action" onclick="triggerPeptideReactionAnimation()">펩타이드 결합 시뮬레이션 가동</button>
+                </div>
+            </div>
+
+            <div class="category-block">
+                <button class="category-trigger" onclick="toggleCategory('panel-structures-hierarchy')">
+                    <span>4. 단백질 구조론 (Protein Hierarchy Structural Levels)</span>
+                    <span>▼</span>
+                </button>
+                <div class="sub-panel" id="panel-structures-hierarchy" style="display:none;">
+                    <p style="font-size:11px; color:var(--text-muted); margin-bottom:5px;">단백질 접힘(Folding)의 위상수학 구조 단계를 선택해 연산합니다.</p>
+                    
+                    <button class="btn-action" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); text-align:left; font-size:12px; margin-bottom:4px;" onclick="triggerStructureLevel(1)">
+                        <strong>1차 구조 (Primary Structure)</strong><br>
+                        <span style="font-size:11px; font-weight:normal; color:var(--text-muted);">아미노산 배열 서열화 (Met-Ala-Gly-Lys-Val...)</span>
+                    </button>
+
+                    <button class="btn-action" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); text-align:left; font-size:12px; margin-bottom:4px;" onclick="triggerStructureLevel(2)">
+                        <strong>2차 구조 (Secondary Structure)</strong><br>
+                        <span style="font-size:11px; font-weight:normal; color:var(--text-muted);">국소 변형 체인형 α-나선 (Alpha Helix) 및 β-병풍 (Beta Sheet)의 구획 구분</span>
+                    </button>
+
+                    <button class="btn-action" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); text-align:left; font-size:12px; margin-bottom:4px;" onclick="triggerStructureLevel(3)">
+                        <strong>3차 구조 (Tertiary Structure)</strong><br>
+                        <span style="font-size:11px; font-weight:normal; color:var(--text-muted);">독립적 완결 입체 삼차원 폴딩 (효소 / 미오글로빈 Myoglobin 구조체 로드)</span>
+                    </button>
+
+                    <button class="btn-action" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); text-align:left; font-size:12px;" onclick="triggerStructureLevel(4)">
+                        <strong>4차 구조 (Quaternary Structure)</strong><br>
+                        <span style="font-size:11px; font-weight:normal; color:var(--text-muted);">다중 서브유닛 복합체 기능 완결 구현 (헤모글로빈 Hemoglobin 거대 구조 유도)</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="right-sidebar">
+        <div class="section-title">분자 물리화학 데이터 분석 스캔</div>
+        <table class="info-table">
+            <tr><th>분석 대상 모델</th><td id="meta-model-title">자연형 비정형 엉킴 복합체</td></tr>
+            <tr><th>총 가시 원자 수</th><td id="meta-atoms-count">계산 중...</td></tr>
+            <tr><th>고유 구조 레벨</th><td id="meta-current-level">1차 구조 복합 시퀀스</td></tr>
+        </table>
+
+        <div class="section-title" style="margin-top:20px;">원자 세부 정보 (Atom Inspector)</div>
+        <div id="inspector-empty" style="font-size:11px; color:var(--text-muted); padding:10px 0;">3D 뷰어 상의 특정 구체 원자를 클릭하면 상세 분자 도메인과 고유 물성이 동적으로 추적 바인딩됩니다.</div>
+        <table class="info-table id-table" id="inspector-table" style="display:none;">
+            <tr><th>원소 구분</th><td id="ins-element">-</td></tr>
+            <tr><th>원자 번호</th><td id="ins-number">-</td></tr>
+            <tr><th>원자 질량</th><td id="ins-mass">-</td></tr>
+            <tr><th>소속 잔기</th><td id="ins-resname">-</td></tr>
+            <tr><th>고유 3D 좌표</th><td id="ins-coords">-</td></tr>
+        </table>
+    </div>
+
+    <div id="bottom-bar">
+        <div id="status-msg">시스템 정상 가동 중. 자연 분산형 복합 응집 구조 로드 완료.</div>
+        <div>WebGL 2.0 Realtime Acceleration Mode</div>
+    </div>
+
+    <script>
+        const MOLECULAR_ELEMENTS = {
+            'C': { color: 0x555555, name: 'Carbon (탄소)', number: 6, mass: 12.011 },
+            'H': { color: 0xffffff, name: 'Hydrogen (수소)', number: 1, mass: 1.008 },
+            'O': { color: 0xff0d0d, name: 'Oxygen (산소)', number: 8, mass: 15.999 },
+            'N': { color: 0x3050f8, name: 'Nitrogen (질소)', number: 7, mass: 14.007 },
+            'S': { color: 0xffff30, name: 'Sulfur (황)', number: 16, mass: 32.060 },
+            'SE': { color: 0xb87333, name: 'Selenium (셀레늄)', number: 34, mass: 78.960 }
+        };
+
+        // 기준 단백질 단일 유닛 서열 데이터 템플릿
+        const BASE_UNIT_DATA = [
+            { elem: 'N', name: 'N', res: 'MET', seq: 1, x: -6.0, y: 1.0, z: 0.2, ss: 'LOOP' },
+            { elem: 'C', name: 'CA', res: 'MET', seq: 1, x: -4.5, y: 0.8, z: -0.1, ss: 'LOOP' },
+            { elem: 'C', name: 'C', res: 'MET', seq: 1, x: -3.5, y: 2.0, z: 0.0, ss: 'LOOP' },
+            { elem: 'O', name: 'O', res: 'MET', seq: 1, x: -3.8, y: 3.1, z: -0.2, ss: 'LOOP' },
+            { elem: 'S', name: 'SD', res: 'MET', seq: 1, x: -4.8, y: -0.5, z: -0.8, ss: 'LOOP' },
+            
+            { elem: 'N', name: 'N', res: 'ALA', seq: 2, x: -2.2, y: 1.8, z: 0.4, ss: 'HELIX' },
+            { elem: 'C', name: 'CA', res: 'ALA', seq: 2, x: -1.0, y: 2.6, z: 0.6, ss: 'HELIX' },
+            { elem: 'C', name: 'C', res: 'ALA', seq: 2, x: 0.0, y: 1.6, z: 1.0, ss: 'HELIX' },
+            { elem: 'O', name: 'O', res: 'ALA', seq: 2, x: -0.2, y: 0.4, z: 1.2, ss: 'HELIX' },
+            
+            { elem: 'N', name: 'N', res: 'GLY', seq: 3, x: 1.2, y: 2.1, z: 1.0, ss: 'HELIX' },
+            { elem: 'C', name: 'CA', res: 'GLY', seq: 3, x: 2.2, y: 1.3, z: 1.4, ss: 'HELIX' },
+            { elem: 'C', name: 'C', res: 'GLY', seq: 3, x: 3.2, y: 2.2, z: 1.8, ss: 'HELIX' },
+            { elem: 'O', name: 'O', res: 'GLY', seq: 3, x: 3.0, y: 3.4, z: 1.9, ss: 'HELIX' },
+
+            { elem: 'N', name: 'N', res: 'LYS', seq: 4, x: 4.5, y: 1.7, z: 1.9, ss: 'SHEET' },
+            { elem: 'C', name: 'CA', res: 'LYS', seq: 4, x: 5.6, y: 2.4, z: 2.4, ss: 'SHEET' },
+            { elem: 'C', name: 'C', res: 'LYS', seq: 4, x: 6.6, y: 1.4, z: 2.8, ss: 'SHEET' },
+            { elem: 'O', name: 'O', res: 'LYS', seq: 4, x: 6.4, y: 0.2, z: 2.9, ss: 'SHEET' },
+
+            { elem: 'N', name: 'N', res: 'VAL', seq: 5, x: 7.8, y: 1.9, z: 3.0, ss: 'SHEET' },
+            { elem: 'C', name: 'CA', res: 'VAL', seq: 5, x: 9.0, y: 1.1, z: 3.4, ss: 'SHEET' },
+            { elem: 'C', name: 'C', res: 'VAL', seq: 5, x: 10.0, y: 2.1, z: 3.8, ss: 'SHEET' },
+            { elem: 'O', name: 'O', res: 'VAL', seq: 5, x: 9.8, y: 3.3, z: 3.7, ss: 'SHEET' },
+            { elem: 'SE', name: 'SE', res: 'VAL', seq: 5, x: 9.2, y: -0.3, z: 4.4, ss: 'SHEET' },
+            { elem: 'H', name: 'H', res: 'VAL', seq: 5, x: 8.6, y: 1.0, z: 2.4, ss: 'SHEET' }
+        ];
+
+        // [핵심 변경부] 단백질들을 가지런하지 않게, 무작위 각도로 회전시키고 서로 엉키도록 혼합하는 난수 공간 함수
+        function generateNaturalEntangledComplex() {
+            const complexData = [];
+            let idCounter = 0;
+            
+            // 자연스러운 밀집 및 꼬임을 생성하기 위한 불규칙한 중심 위치값들
+            const randomCenters = [
+                { cx: -1, cy: -2, cz: 1 },
+                { cx: 3,  cy: 1,  cz: -2 },
+                { cx: -2, cy: 3,  cz: -1 },
+                { cx: 2,  cy: -3, cz: 2 },
+                { cx: 0,  cy: 0,  cz: 0 }
+            ];
+
+            randomCenters.forEach((center, uIdx) => {
+                // 단백질 유닛마다 무작위 3차원 오일러 회전 각도(라디안) 생성
+                const randAngleX = Math.random() * Math.PI * 2;
+                const randAngleY = Math.random() * Math.PI * 2;
+                const randAngleZ = Math.random() * Math.PI * 2;
+
+                BASE_UNIT_DATA.forEach(atom => {
+                    // 회전 변환 행렬 연산을 임시로 대입하기 위한 Vector3 생성
+                    let vec = new THREE.Vector3(atom.x, atom.y, atom.z);
+                    
+                    // 인위적인 정렬을 깨기 위해 각 단백질 분자 사슬을 완전히 뒤틀어 비틉니다.
+                    vec.applyAxisAngle(new THREE.Vector3(1, 0, 0), randAngleX);
+                    vec.applyAxisAngle(new THREE.Vector3(0, 1, 0), randAngleY);
+                    vec.applyAxisAngle(new THREE.Vector3(0, 0, 1), randAngleZ);
+
+                    complexData.push({
+                        id: idCounter++,
+                        elem: atom.elem,
+                        name: atom.name,
+                        res: atom.res,
+                        seq: atom.seq + (uIdx * 10),
+                        // 완전히 뒤엉키도록 무작위 회전된 좌표에 미세 난수 오프셋 센터 결합
+                        x: vec.x + center.cx + (Math.random() - 0.5) * 1.5,
+                        y: vec.y + center.cy + (Math.random() - 0.5) * 1.5,
+                        z: vec.z + center.cz + (Math.random() - 0.5) * 1.5,
+                        ss: atom.ss
+                    });
+                });
+            });
+            return complexData;
+        }
+
+        const Engine = {
+            scene: null, camera: null, renderer: null, controls: null,
+            atomMesh: null, bondMesh: null,
+            atomsData: generateNaturalEntangledComplex(), 
+            activeFilter: { type: 'ALL', target: null },
+            raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2()
+        };
+
+        window.onload = function() {
+            initThreeGraphics();
+            setupSidebarResizer();
+            buildActiveVisualization();
+            animateLoop();
+        };
+
+        function initThreeGraphics() {
+            const container = document.getElementById('canvas-container');
+            Engine.scene = new THREE.Scene();
+            Engine.scene.background = new THREE.Color(0x0a0b0d);
+
+            Engine.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            Engine.camera.position.set(0, 0, 35); 
+
+            Engine.renderer = new THREE.WebGLRenderer({ antialias: true });
+            Engine.renderer.setSize(window.innerWidth, window.innerHeight);
+            Engine.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(Engine.renderer.domElement);
+
+            Engine.controls = new THREE.OrbitControls(Engine.camera, Engine.renderer.domElement);
+            Engine.controls.enableDamping = true;
+            Engine.controls.dampingFactor = 0.05;
+
+            const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+            Engine.scene.add(ambLight);
+
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.85);
+            dirLight1.position.set(30, 40, 30);
+            Engine.scene.add(dirLight1);
+
+            const dirLight2 = new THREE.DirectionalLight(0x6366f1, 0.45);
+            dirLight2.position.set(-30, -40, -30);
+            Engine.scene.add(dirLight2);
+
+            window.addEventListener('resize', () => {
+                Engine.camera.aspect = window.innerWidth / window.innerHeight;
+                Engine.camera.updateProjectionMatrix();
+                Engine.renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            window.addEventListener('click', parseViewportObjectSelection);
+        }
+
+        function setupSidebarResizer() {
+            const sidebar = document.getElementById('left-sidebar');
+            const resizer = document.getElementById('sidebar-resizer');
+            let isDragging = false;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                document.body.classList.add('resizing');
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                let computedWidth = e.clientX - 15;
+                if(computedWidth >= 320 && computedWidth <= 600) {
+                    sidebar.style.width = computedWidth + 'px';
+                }
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    document.body.classList.remove('resizing');
+                }
+            });
+        }
+
+        function toggleCategory(panelId) {
+            const currentPanel = document.getElementById(panelId);
+            currentPanel.style.display = currentPanel.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        function buildActiveVisualization() {
+            if(Engine.atomMesh) Engine.scene.remove(Engine.atomMesh);
+            if(Engine.bondMesh) Engine.scene.remove(Engine.bondMesh);
+
+            const filteredAtoms = Engine.atomsData.filter(atom => {
+                if (Engine.activeFilter.type === 'ALL') return true;
+                if (Engine.activeFilter.type === 'ELEMENT') return atom.elem === Engine.activeFilter.target;
+                if (Engine.activeFilter.type === 'AMINO_GROUP') return Engine.activeFilter.target.includes(atom.res);
+                if (Engine.activeFilter.type === 'SINGLE_RESIDUE') return atom.res === Engine.activeFilter.target;
+                if (Engine.activeFilter.type === 'SS_LEVEL') {
+                    if (Engine.activeFilter.target === 'HELIX') return atom.ss === 'HELIX';
+                    if (Engine.activeFilter.target === 'SHEET') return atom.ss === 'SHEET';
+                }
+                return true;
+            });
+
+            document.getElementById('meta-atoms-count').innerText = filteredAtoms.length + " / " + Engine.atomsData.length + " (Atoms)";
+
+            const FRAME_SCALE = 1.6;
+
+            const sphereGeo = new THREE.SphereGeometry(0.7, 16, 16);
+            const atomMat = new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1 });
+            
+            Engine.atomMesh = new THREE.InstancedMesh(sphereGeo, atomMat, filteredAtoms.length);
+            const dummy = new THREE.Object3D();
+
+            for(let i = 0; i < filteredAtoms.length; i++) {
+                const atom = filteredAtoms[i];
+                dummy.position.set(atom.x * FRAME_SCALE, atom.y * FRAME_SCALE, atom.z * FRAME_SCALE);
+                dummy.updateMatrix();
+                Engine.atomMesh.setMatrixAt(i, dummy.matrix);
+
+                const elementMeta = MOLECULAR_ELEMENTS[atom.elem] || { color: 0xff00ff };
+                Engine.atomMesh.setColorAt(i, new THREE.Color(elementMeta.color));
+            }
+            Engine.scene.add(Engine.atomMesh);
+
+            const cylGeo = new THREE.CylinderGeometry(0.18, 0.18, 1, 8);
+            cylGeo.translate(0, 0.5, 0);
+            cylGeo.rotateX(Math.PI / 2);
+            const bondMat = new THREE.MeshStandardMaterial({ color: 0x555558, roughness: 0.5 });
+            
+            const activeBonds = [];
+            for (let i = 0; i < filteredAtoms.length; i++) {
+                for (let j = i + 1; j < filteredAtoms.length; j++) {
+                    const p1 = new THREE.Vector3(filteredAtoms[i].x * FRAME_SCALE, filteredAtoms[i].y * FRAME_SCALE, filteredAtoms[i].z * FRAME_SCALE);
+                    const p2 = new THREE.Vector3(filteredAtoms[j].x * FRAME_SCALE, filteredAtoms[j].y * FRAME_SCALE, filteredAtoms[j].z * FRAME_SCALE);
+                    
+                    // 엉켜있는 상태에서 자연스러운 거리 결합선을 연결하기 위해 탐색 임계값 설정
+                    if (p1.distanceTo(p2) < 2.5 * FRAME_SCALE) {
+                        activeBonds.push({ from: p1, to: p2 });
+                    }
+                }
+            }
+
+            Engine.bondMesh = new THREE.InstancedMesh(cylGeo, bondMat, activeBonds.length);
+            for(let i=0; i<activeBonds.length; i++) {
+                const bond = activeBonds[i];
+                dummy.position.copy(bond.from);
+                dummy.lookAt(bond.to);
+                dummy.scale.set(1, 1, bond.from.distanceTo(bond.to));
+                dummy.updateMatrix();
+                Engine.bondMesh.setMatrixAt(i, dummy.matrix);
+            }
+            Engine.scene.add(Engine.bondMesh);
+
+            Engine.atomMesh.userData.sourceAtoms = filteredAtoms;
+        }
+
+        function filterByElement(elementSymbol) {
+            Engine.activeFilter = { type: 'ELEMENT', target: elementSymbol };
+            document.getElementById('meta-current-level').innerText = `원소별 추적: ${elementSymbol}`;
+            buildActiveVisualization();
+        }
+
+        function filterByAminoGroup(resNameArray) {
+            Engine.activeFilter = { type: 'AMINO_GROUP', target: resNameArray };
+            document.getElementById('meta-current-level').innerText = `속성 그룹 필터 적용됨`;
+            buildActiveVisualization();
+        }
+
+        function filterBySingleResidue(resName) {
+            Engine.activeFilter = { type: 'SINGLE_RESIDUE', target: resName };
+            document.getElementById('meta-current-level').innerText = `단일 아미노산 분석: ${resName}`;
+            buildActiveVisualization();
+        }
+
+        function resetToGlobalView() {
+            Engine.activeFilter = { type: 'ALL', target: null };
+            Engine.atomsData = generateNaturalEntangledComplex();
+            document.getElementById('meta-model-title').innerText = "자연형 비정형 엉킴 복합체";
+            document.getElementById('meta-current-level').innerText = "1차 구조 복합 시퀀스";
+            buildActiveVisualization();
+        }
+
+        function triggerPeptideReactionAnimation() {
+            const toast = document.getElementById('reaction-toast');
+            toast.innerHTML = `<strong>[탈수축합 반응 트리거]</strong><br>-COOH + -NH₂ → -CO-NH- (펩타이드 결합) 형성 <br> <span style='color:#ffcccc;'>H₂O (물 분자 탈락 진행 완료)</span>`;
+            toast.style.display = 'block';
+
+            let progress = 0;
+            const reactionInterval = setInterval(() => {
+                progress += 0.1;
+                Engine.atomMesh.rotation.y += 0.04;
+                if(progress >= 2.5) {
+                    clearInterval(reactionInterval);
+                    toast.style.display = 'none';
+                    document.getElementById('status-msg').innerText = "탈수축합 반응식 결합 링크 모델링 완료.";
+                }
+            }, 50);
+        }
+
+        function triggerStructureLevel(level) {
+            const modelTitle = document.getElementById('meta-model-title');
+            const levelInfo = document.getElementById('meta-current-level');
+
+            if (level === 1) {
+                Engine.atomsData = generateNaturalEntangledComplex();
+                Engine.activeFilter = { type: 'ALL', target: null };
+                modelTitle.innerText = "1차 서열 구조 모델";
+                levelInfo.innerText = "배열선: Met-Ala-Gly-Lys-Val...";
+            } 
+            else if (level === 2) {
+                Engine.atomsData = generateNaturalEntangledComplex();
+                Engine.activeFilter = { type: 'SS_LEVEL', target: 'ALL' };
+                modelTitle.innerText = "2차 국소 폴딩 구조 모델";
+                levelInfo.innerText = "구분: α-나선 (Alpha Helix) & β-병풍 (Beta Sheet) 가시화";
+            } 
+            else if (level === 3) {
+                modelTitle.innerText = "3차 완결 입체 구조 (Myoglobin 미오글로빈)";
+                levelInfo.innerText = "하나의 단백질 전체가 완벽하게 구형 입체화된 효소 복합 구조체";
+                generateTertiaryGlobularComplex();
+            } 
+            else if (level === 4) {
+                modelTitle.innerText = "4차 다중 복합 구조 (Hemoglobin 헤모글로빈)";
+                levelInfo.innerText = "4개의 대칭형 서브유닛 사슬이 완전 결합한 기능형 4차 구조 완결";
+                generateQuaternaryComplex();
+            }
+            buildActiveVisualization();
+        }
+
+        function generateTertiaryGlobularComplex() {
+            Engine.atomsData = [];
+            const residues = ['MET', 'ALA', 'GLY', 'LYS', 'VAL', 'PHE', 'CYS', 'HIS'];
+            const elements = ['C', 'H', 'O', 'N', 'S'];
+            let idCounter = 0;
+            
+            const centers = [
+                {cx: -2, cy: -1, cz: 1}, {cx: 2, cy: 3, cz: -2},
+                {cx: 1, cy: -3, cz: 2}, {cx: -3, cy: 2, cz: -1}
+            ];
+
+            centers.forEach(center => {
+                for(let r=0; r<12; r++) {
+                    const centerRadius = 4 + Math.random() * 2;
+                    const phi = Math.random() * Math.PI * 2;
+                    const theta = Math.random() * Math.PI;
+                    
+                    for(let a=0; a<5; a++) {
+                        const ox = center.cx + centerRadius * Math.sin(theta) * Math.cos(phi) + (Math.random()-0.5)*1.2;
+                        const oy = center.cy + centerRadius * Math.sin(theta) * Math.sin(phi) + (Math.random()-0.5)*1.2;
+                        const oz = center.cz + centerRadius * Math.cos(theta) + (Math.random()-0.5)*1.2;
+                        
+                        Engine.atomsData.push({
+                            id: idCounter++,
+                            elem: elements[Math.floor(Math.random() * elements.length)],
+                            res: residues[r % residues.length],
+                            seq: r + 1, x: ox, y: oy, z: oz, ss: 'LOOP'
+                        });
+                    }
+                }
+            });
+        }
+
+        function generateQuaternaryComplex() {
+            generateTertiaryGlobularComplex();
+            const baseData = [...Engine.atomsData];
+            let idCounter = baseData.length;
+
+            const offsets = [
+                { x: 8, y: 6, z: -2 },
+                { x: -6, y: -8, z: 4 },
+                { x: 4, y: -6, z: -5 }
+            ];
+
+            offsets.forEach(offset => {
+                baseData.forEach(atom => {
+                    // 복합체 결합 시에도 무작위 회전을 주어 복잡성을 높임
+                    Engine.atomsData.push({
+                        id: idCounter++,
+                        elem: atom.elem,
+                        res: atom.res,
+                        seq: atom.seq + 200,
+                        x: atom.x + offset.x + (Math.random() - 0.5) * 2,
+                        y: atom.y + offset.y + (Math.random() - 0.5) * 2,
+                        z: atom.z + offset.z + (Math.random() - 0.5) * 2,
+                        ss: 'LOOP'
+                    });
+                });
+            });
+        }
+
+        function parseViewportObjectSelection(e) {
+            const sidebarElement = document.getElementById('left-sidebar');
+            if (e.clientX < sidebarElement.clientWidth + 20 || e.clientX > window.innerWidth - 350) return;
+
+            Engine.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            Engine.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            Engine.raycaster.setFromCamera(Engine.mouse, Engine.camera);
+            if (!Engine.atomMesh) return;
+
+            const intersects = Engine.raycaster.intersectObject(Engine.atomMesh);
+
+            if(intersects.length > 0) {
+                const instanceId = intersects[0].instanceId;
+                const sourceAtoms = Engine.atomMesh.userData.sourceAtoms;
+                const atom = sourceAtoms[instanceId];
+
+                if(atom) {
+                    document.getElementById('inspector-empty').style.display = 'none';
+                    document.getElementById('inspector-table').style.display = 'table';
+
+                    const meta = MOLECULAR_ELEMENTS[atom.elem] || { name: 'Unknown', number: 0, mass: 0 };
+                    document.getElementById('ins-element').innerText = meta.name;
+                    document.getElementById('ins-number').innerText = meta.number + " 번";
+                    document.getElementById('ins-mass').innerText = meta.mass + " amu";
+                    document.getElementById('ins-resname').innerText = `${atom.res} (잔기 No.${atom.seq})`;
+                    document.getElementById('ins-coords').innerText = `X:${atom.x.toFixed(2)}, Y:${atom.y.toFixed(2)}`;
+                }
+            }
+        }
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            Engine.controls.update();
+            Engine.renderer.render(Engine.scene, Engine.camera);
+        }
+    </script>
+</body>
+</html>
+
+
