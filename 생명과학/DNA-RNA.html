@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Molecular Biology Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --panel:rgba(10,18,31,.72);
+  --line:rgba(255,255,255,.16);
+  --text:#f4fbff;
+  --muted:#9fb4c4;
+  --accent:#38bdf8;
+  --a:#10b981;
+  --t:#ef4444;
+  --g:#f59e0b;
+  --c:#3b82f6;
+  --u:#ec4899;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020617;color:var(--text);font-family:system-ui,"Malgun Gothic",sans-serif}
+#viewport{position:fixed;inset:0}
+.glass{position:fixed;z-index:10;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(18px);border-radius:10px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
+#header{top:14px;left:14px;right:340px;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 18px}
+#header h1{margin:0;font-size:18px;font-weight:800;color:#f8fafc}
+
+/* 우측 상단 페이지 이동 버튼 그룹 스타일 */
+#navGroup{top:14px;right:14px;width:310px;height:64px;display:flex;align-items:center;justify-content:space-around;padding:0 10px}
+#navGroup button{flex:1;margin:0 4px;font-weight:bold;font-size:15px;background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.4)}
+#navGroup button:hover{background:var(--accent);color:#020617;box-shadow:0 0 12px var(--accent)}
+
+#left{top:92px;left:14px;bottom:92px;width:310px;padding:16px;overflow:auto}
+/* 우측 링크 버튼 때문에 상단 겹침 방지를 위해 top 위치를 92px에서 160px로 조정 */
+#right{top:160px;right:14px;bottom:92px;width:310px;padding:16px;overflow:auto}
+#bottom{left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:10px 14px}
+
+.group{border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:14px;margin-bottom:14px}
+.group:last-child{border-bottom:0;margin-bottom:0}
+.title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:800;margin-bottom:10px}
+button,select,input{font:inherit;color:var(--text)}
+button{height:36px;border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:7px;padding:0 10px;cursor:pointer}
+button:hover,button.active{background:rgba(56,189,248,.22);border-color:var(--accent)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select,input[type=text]{width:100%;height:36px;border:1px solid var(--line);background:rgba(0,0,0,.28);border-radius:7px;padding:0 10px}
+input[type=range]{accent-color:var(--accent)}
+#info h2{margin:0 0 8px;font-size:19px}
+#info p{margin:0 0 10px;color:var(--muted);font-size:13px;line-height:1.5}
+.segment{border-left:3px solid var(--accent);background:rgba(255,255,255,.05);border-radius:6px;padding:9px 10px;margin:8px 0;font-size:13px;line-height:1.5}
+.segment b{color:#dff7ff}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--line);border-radius:999px;margin:3px;font-size:12px;cursor:pointer}
+.badge:hover, .badge.active{background:rgba(255,255,255,0.15);border-color:var(--accent)}
+.swatch{width:10px;height:10px;border-radius:50%}
+#toast{position:fixed;top:92px;left:50%;transform:translateX(-50%);z-index:20;padding:10px 14px;background:rgba(6,12,22,.9);border:1px solid var(--line);border-radius:8px;opacity:0;transition:.2s;pointer-events:none}
+#toast.show{opacity:1}
+@media(max-width:900px){
+  #header,#navGroup,#left,#right,#bottom{position:relative;inset:auto;transform:none;width:auto;margin:10px}
+  body{overflow:auto}
+  #viewport{position:fixed}
+}
+</style>
+</head>
+<body>
+<div id="viewport"></div>
+
+<div id="header" class="glass">
+  <h1>분자생물학 3D 시뮬레이터</h1>
+  <div class="row">
+    <button id="btnDNA" class="active">DNA</button>
+    <button id="btnRNA">RNA</button>
+  </div>
+</div>
+
+<div id="navGroup" class="glass">
+  <button onclick="location.href='DNA-RNA.html'">1</button>
+  <button onclick="location.href='생명.html'">2</button>
+  <button onclick="location.href='세포막.html'">3</button>
+</div>
+
+<aside id="left" class="glass">
+  <div class="group">
+    <div class="title">시뮬레이션</div>
+    <div class="grid">
+      <button id="play" class="active">재생</button>
+      <button id="pause">정지</button>
+      <button id="auto">자동 회전</button>
+      <button id="reset">초기화</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="title">실제 동작 버튼</div>
+    <div class="grid">
+      <button data-action="transcription">전사</button>
+      <button data-action="translation">번역</button>
+      <button data-action="replication">복제</button>
+      <button data-action="mutation">돌연변이</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="title">분자 구조 형태 선택</div>
+    <div id="dnaShapeGroup">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">DNA 형태</div>
+      <select id="dnaShape" style="margin-bottom:10px">
+        <option value="B-DNA">B-DNA - 표준 오른손 나선</option>
+        <option value="A-DNA">A-DNA - 짧고 굵은 나선</option>
+        <option value="Z-DNA">Z-DNA - 길고 왼손 나선</option>
+      </select>
+    </div>
+    <div id="rnaShapeGroup" style="display:none;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">RNA 형태</div>
+      <select id="rnaShape">
+        <option value="mRNA">mRNA - 선형 단일가닥</option>
+        <option value="tRNA">tRNA - L자 접힘</option>
+        <option value="rRNA">rRNA - 복잡한 접힘</option>
+        <option value="miRNA">miRNA - 짧은 hairpin</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="title">염기서열</div>
+    <input id="seq" type="text" value="ATGCGTACCGTTAAGGCCATATGCGCGTAACCGT">
+    <div class="row" style="margin-top:8px">
+      <button id="applySeq">적용</button>
+      <button id="randomSeq">무작위</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="title">마우스 조작</div>
+    <div class="segment">
+      왼쪽 드래그: 자유 회전<br>
+      오른쪽 드래그: 자유 이동<br>
+      마우스 휠 스크롤: 확대/축소<br>
+      염기 클릭: 해당 염기 확대 모델 표시
+    </div>
+  </div>
+</aside>
+
+<aside id="right" class="glass">
+  <div id="info">
+    <h2>선택 정보</h2>
+    <p>아데닌, 티민, 구아닌, 사이토신, 우라실을 클릭하면 설명과 함께 선택된 한 부분의 확대 3D 모델이 같이 표시됩니다.</p>
+  </div>
+  <div class="group">
+    <div class="title">염기 필터 보기 (클릭 시 해당 염기만 표시)</div>
+    <span class="badge" data-filter="A"><span class="swatch" style="background:var(--a)"></span>A 아데닌</span>
+    <span class="badge" data-filter="T"><span class="swatch" style="background:var(--t)"></span>T 티민</span>
+    <span class="badge" data-filter="G"><span class="swatch" style="background:var(--g)"></span>G 구아닌</span>
+    <span class="badge" data-filter="C"><span class="swatch" style="background:var(--c)"></span>C 사이토신</span>
+    <span class="badge" data-filter="U"><span class="swatch" style="background:var(--u)"></span>U 우라실</span>
+  </div>
+</aside>
+
+<div id="bottom" class="glass">
+  <span style="font-size:13px;color:var(--muted)">속도</span>
+  <input id="speed" type="range" min="0" max="4" step=".1" value="1">
+  <span id="clock" style="font-family:monospace;color:var(--muted)">0.00 ns</span>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const Bases={
+  A:{ko:"아데닌",en:"Adenine",kind:"퓨린",pair:"T 또는 U",hb:2,color:0x10b981,formula:"C5H5N5",role:"A-T 또는 A-U 결합을 만들며 ATP와 유전암호에도 중요합니다."},
+  T:{ko:"티민",en:"Thymine",kind:"피리미딘",pair:"A",hb:2,color:0xef4444,formula:"C5H6N2O2",role:"DNA에서 아데닌과 결합하며 RNA에서는 보통 우라실로 대체됩니다."},
+  G:{ko:"구아닌",en:"Guanine",kind:"퓨린",pair:"C",hb:3,color:0xf59e0b,formula:"C5H5N5O",role:"사이토신과 3개의 수소결합을 만들어 DNA 안정성을 높입니다."},
+  C:{ko:"사이토신",en:"Cytosine",kind:"피리미딘",pair:"G",hb:3,color:0x3b82f6,formula:"C4H5N3O",role:"구아닌과 결합하며 DNA 메틸화 같은 유전자 조절과 관련됩니다."},
+  U:{ko:"우라실",en:"Uracil",kind:"피리미딘",pair:"A",hb:2,color:0xec4899,formula:"C4H4N2O2",role:"RNA에서 티민 대신 사용되며 아데닌과 결합합니다."}
+};
+
+let scene,camera,renderer,mainGroup,detailGroup,processGroup;
+let raycaster=new THREE.Raycaster();
+let mouse=new THREE.Vector2();
+let clickable=[];
+let selected=null;
+
+const state={
+  mode:"DNA",
+  seq:"ATGCGTACCGTTAAGGCCATATGCGCGTAACCGT",
+  playing:true,
+  auto:false,
+  action:"none",
+  dnaShape:"B-DNA",
+  rnaShape:"mRNA",
+  activeFilter:null,
+  time:0,
+  speed:1,
+  rotX:0,
+  rotY:0,
+  panX:0,
+  panY:0,
+  zoom:48, 
+  drag:false,
+  panDrag:false,
+  lastX:0,
+  lastY:0
+};
+
+init();
+
+function init(){
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x020617);
+  scene.fog=new THREE.FogExp2(0x020617,.018);
+
+  camera=new THREE.PerspectiveCamera(state.zoom,innerWidth/innerHeight,.1,1000);
+  camera.position.set(0,4,60);
+
+  renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance"});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;
+  document.getElementById("viewport").appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xbdefff,.55));
+  const key=new THREE.DirectionalLight(0xffffff,2.2);
+  key.position.set(25,35,30);
+  key.castShadow=true;
+  scene.add(key);
+  const rim=new THREE.PointLight(0x38bdf8,2,130);
+  rim.position.set(-30,-10,36);
+  scene.add(rim);
+
+  mainGroup=new THREE.Group();
+  detailGroup=new THREE.Group();
+  processGroup=new THREE.Group();
+  scene.add(mainGroup,detailGroup,processGroup);
+
+  bindUI();
+  bindMouse();
+  build();
+  animate();
+}
+
+function mat(color,opacity){
+  return new THREE.MeshPhongMaterial({
+    color,
+    shininess:90,
+    specular:0xffffff,
+    transparent:opacity!==undefined,
+    opacity:opacity===undefined?1:opacity
+  });
+}
+
+function sphere(pos,r,material,data,parent){
+  const m=new THREE.Mesh(new THREE.SphereGeometry(r,28,18),material);
+  m.position.copy(pos);
+  m.castShadow=true;
+  m.receiveShadow=true;
+  if(data){
+    m.userData=data;
+    clickable.push(m);
+  }
+  (parent||mainGroup).add(m);
+  return m;
+}
+
+function tube(a,b,r,material,parent){
+  const d=new THREE.Vector3().subVectors(b,a);
+  const g=new THREE.CylinderGeometry(r,r,d.length(),12);
+  const m=new THREE.Mesh(g,material);
+  m.position.copy(a).add(b).multiplyScalar(.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
+  m.castShadow=true;
+  m.receiveShadow=true;
+  (parent||mainGroup).add(m);
+  return m;
+}
+
+function clear(group){
+  while(group.children.length){
+    const o=group.children.pop();
+    o.traverse(x=>{
+      if(x.geometry)x.geometry.dispose();
+      if(x.material && !Array.isArray(x.material))x.material.dispose();
+    });
+  }
+}
+
+function sanitize(seq,rna){
+  return String(seq||"").toUpperCase().replace(/U/g,rna?"U":"T").replace(rna?/[^AUGC]/g:/[^ATGC]/g,"").slice(0,90);
+}
+
+function comp(b,rna){
+  if(b==="A")return rna?"U":"T";
+  if(b==="T"||b==="U")return "A";
+  if(b==="G")return "C";
+  if(b==="C")return "G";
+  return "N";
+}
+
+function dnaPoint(i,strand,radius){
+  let turn=10.5;
+  let pitch=0.92;
+  let isLeftHanded=false;
+
+  if(state.dnaShape==="A-DNA"){
+    turn=11.0;
+    pitch=0.72;
+  } else if(state.dnaShape==="Z-DNA"){
+    turn=12.0;
+    pitch=1.16;
+    isLeftHanded=true;
+  }
+
+  let angle=i*Math.PI*2/turn;
+  if(isLeftHanded) angle=-angle;
+  angle += (strand>0?0:Math.PI);
+
+  return new THREE.Vector3(
+    Math.cos(angle)*radius,
+    i*pitch-state.seq.length*(pitch*0.5),
+    Math.sin(angle)*radius
+  );
+}
+
+function build(){
+  clear(mainGroup);
+  clear(detailGroup);
+  clear(processGroup);
+  clickable=[];
+  selected=null;
+
+  const isRNA=state.mode==="RNA";
+  state.seq=sanitize(state.seq,isRNA);
+  document.getElementById("seq").value=state.seq;
+
+  if(state.mode==="DNA")buildDNA();
+  else buildRNA();
+
+  if(state.action!=="none")buildAction();
+  updateInfoDefault();
+}
+
+function buildDNA(){
+  const seq=state.seq;
+  const backMat=mat(0x9fb4c4);
+  const sugarMat=mat(0xfef3c7);
+  const phosMat=mat(0xf97316);
+  const bondMat=mat(0xe2e8f0,.58);
+  const stackMat=mat(0x94a3b8,.25);
+
+  let prevA=null,prevB=null;
+  
+  let rMain = (state.dnaShape==="A-DNA")? 8.6 : (state.dnaShape==="Z-DNA"? 6.8 : 7.4);
+  let rSugar = (state.dnaShape==="A-DNA")? 6.8 : (state.dnaShape==="Z-DNA"? 5.2 : 5.9);
+
+  for(let i=0;i<seq.length;i++){
+    const b=seq[i], p=comp(b,false);
+    
+    const bVisible = !state.activeFilter || state.activeFilter===b;
+    const pVisible = !state.activeFilter || state.activeFilter===p;
+
+    const a1=dnaPoint(i,1,rMain), a2=dnaPoint(i,-1,rMain);
+    const s1=dnaPoint(i,1,rSugar), s2=dnaPoint(i,-1,rSugar);
+    const base1=dnaPoint(i,1,2.25), base2=dnaPoint(i,-1,2.25);
+
+    sphere(a1,.32,phosMat,{type:"phosphate",id:"인산",base:b,index:i+1});
+    sphere(a2,.32,phosMat,{type:"phosphate",id:"인산",base:p,index:i+1});
+    sphere(s1,.34,sugarMat,{type:"sugar",id:"디옥시리보스",base:b,index:i+1});
+    sphere(s2,.34,sugarMat,{type:"sugar",id:"디옥시리보스",base:p,index:i+1});
+
+    tube(a1,s1,.08,backMat);
+    tube(a2,s2,.08,backMat);
+    
+    if(bVisible){
+      tube(s1,base1,.08,backMat);
+      sphere(base1,.55,mat(Bases[b].color),{type:"base",base:b,index:i+1,strand:"5'→3'"});
+    }
+    if(pVisible){
+      tube(s2,base2,.08,backMat);
+      sphere(base2,.55,mat(Bases[p].color),{type:"base",base:p,index:i+1,strand:"3'→5'"});
+    }
+
+    if(bVisible && pVisible){
+      for(let h=0;h<Bases[b].hb;h++){
+        const off=(h-(Bases[b].hb-1)/2)*.34;
+        tube(base1.clone().add(new THREE.Vector3(0,off,0)),base2.clone().add(new THREE.Vector3(0,off,0)),.025,bondMat);
+      }
+    }
+
+    if(prevA){tube(prevA,a1,.13,backMat);tube(prevB,a2,.13,backMat)}
+    if(i>0 && bVisible && pVisible){
+      let pMid1 = dnaPoint(i-0.5,1,2.9);
+      let pMid2 = dnaPoint(i-0.5,-1,2.9);
+      tube(pMid1,pMid2,.015,stackMat);
+    }
+
+    prevA=a1; prevB=a2;
+  }
+
+  buildGrooveGuide();
+}
+
+function buildGrooveGuide(){
+  const major=mat(0x38bdf8,.12);
+  const minor=mat(0x22c55e,.10);
+  const n=Math.max(20,state.seq.length);
+  let prevMajor=null,prevMinor=null;
+  
+  let turn=(state.dnaShape==="A-DNA")? 11.0 : (state.dnaShape==="Z-DNA"? 12.0 : 10.5);
+  let pitch=(state.dnaShape==="A-DNA")? 0.72 : (state.dnaShape==="Z-DNA"? 1.16 : 0.92);
+  let isLeft=state.dnaShape==="Z-DNA";
+
+  for(let i=0;i<n;i++){
+    const y=i*pitch-state.seq.length*(pitch*0.5);
+    let a=i*Math.PI*2/turn+.55;
+    let b=i*Math.PI*2/turn+Math.PI-.35;
+    if(isLeft){a=-a; b=-b;}
+    
+    const p1=new THREE.Vector3(Math.cos(a)*8.4,y,Math.sin(a)*8.4);
+    const p2=new THREE.Vector3(Math.cos(b)*5.15,y,Math.sin(b)*5.15);
+    if(prevMajor)tube(prevMajor,p1,.035,major);
+    if(prevMinor)tube(prevMinor,p2,.03,minor);
+    prevMajor=p1; prevMinor=p2;
+  }
+}
+
+function buildRNA(){
+  let seq=sanitize(state.seq,true).replace(/T/g,"U");
+  state.seq=seq;
+  const back=mat(0xc8fff0);
+  let prev=null;
+
+  for(let i=0;i<seq.length;i++){
+    const b=seq[i];
+    if(state.activeFilter && state.activeFilter!==b) continue;
+
+    const p=rnaPoint(i,seq.length,state.rnaShape);
+    sphere(p,.52,mat(Bases[b].color),{type:"rna-base",base:b,index:i+1,strand:state.rnaShape});
+    if(prev)tube(prev,p,.105,back);
+    prev=p;
+  }
+
+  if(state.rnaShape==="tRNA"){
+    label3D("anticodon",new THREE.Vector3(0,-8,2),0x38bdf8);
+    label3D("amino acid site",new THREE.Vector3(0,9,2),0xf59e0b);
+  }
+}
+
+function rnaPoint(i,n,shape){
+  if(shape==="tRNA"){
+    const a=i/Math.max(1,n-1)*Math.PI*2;
+    const x=Math.sin(a)*5.2+Math.sin(a*2)*2.4;
+    const y=Math.cos(a)*7.8;
+    const z=Math.sin(a*1.5)*2.8;
+    return new THREE.Vector3(x,y,z);
+  }
+  if(shape==="rRNA"){
+    const a=i*.58;
+    return new THREE.Vector3(Math.cos(a)*(4+Math.sin(i*.23)*3),(i-n/2)*.42,Math.sin(a*1.2)*5.5);
+  }
+  if(shape==="miRNA"){
+    const half=n/2;
+    const x=(i-half)*.55;
+    const y=Math.sin(i*.75)*1.2;
+    const z=i<half?Math.cos(i*.55)*2.2:Math.cos((n-i)*.55)*2.2;
+    return new THREE.Vector3(x,y,z);
+  }
+  return new THREE.Vector3((i-n/2)*.9,Math.sin(i*.5)*1.2,Math.cos(i*.38)*2.3);
+}
+
+function label3D(text,pos,color){
+  const canvas=document.createElement("canvas");
+  canvas.width=256; canvas.height=80;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="rgba(2,6,23,.78)";
+  ctx.strokeStyle="rgba(255,255,255,.28)";
+  ctx.lineWidth=3;
+  ctx.fillRect(8,12,240,54);
+  ctx.strokeRect(8,12,240,54);
+  ctx.fillStyle="#"+color.toString(16).padStart(6,"0");
+  ctx.font="bold 24px sans-serif";
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.fillText(text,128,40);
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(canvas),transparent:true}));
+  sprite.position.copy(pos);
+  sprite.scale.set(7,2.2,1);
+  mainGroup.add(sprite);
+}
+
+function buildAction(){
+  if(state.action==="transcription")buildTranscription();
+  if(state.action==="translation")buildTranslation();
+  if(state.action==="replication")buildReplication();
+  if(state.action==="mutation")buildMutationMarker();
+}
+
+function buildTranscription(){
+  const t=(Math.sin(state.time*.9)+1)/2;
+  const i=Math.floor(t*Math.max(1,state.seq.length-1));
+  const pos=state.mode==="DNA"?dnaPoint(i,1,0):new THREE.Vector3(0,0,0);
+  sphere(pos.clone().add(new THREE.Vector3(0,0,8)),1.8,mat(0x38bdf8,.85),{type:"enzyme",id:"RNA polymerase"},processGroup);
+  labelProcess("RNA polymerase가 이동하며 RNA를 합성 중",new THREE.Vector3(0,12,8));
+  let prev=null;
+  const rna=state.seq.slice(0,i+1).split("").map(x=>comp(x,true)).join("");
+  for(let k=0;k<rna.length;k++){
+    const p=dnaPoint(k,1,2).add(new THREE.Vector3(0,-2,8));
+    sphere(p,.28,mat(Bases[rna[k]].color),{type:"new-rna",base:rna[k],index:k+1},processGroup);
+    if(prev)tube(prev,p,.055,mat(0xec4899),processGroup);
+    prev=p;
+  }
+}
+
+function buildTranslation(){
+  if(state.mode!=="RNA")return;
+  const codonIndex=Math.floor(((Math.sin(state.time*.8)+1)/2)*Math.max(1,Math.floor(state.seq.length/3)-1));
+  const p=rnaPoint(Math.min(state.seq.length-1,codonIndex*3),state.seq.length,state.rnaShape);
+  sphere(p.clone().add(new THREE.Vector3(0,3,4)),2.2,mat(0xf59e0b,.75),{type:"ribosome",id:"리보솜"},processGroup);
+  labelProcess("리보솜이 코돈 단위로 이동 중",new THREE.Vector3(0,12,8));
+  for(let k=0;k<=codonIndex;k++){
+    sphere(new THREE.Vector3(-8+k*.75,10+Math.sin(k)*.4,3),.35,mat(0xef4444),{type:"amino-acid",id:"아미노산"},processGroup);
+  }
+}
+
+function buildReplication(){
+  if(state.mode!=="DNA")return;
+  const fork=Math.floor(((Math.sin(state.time*.65)+1)/2)*Math.max(1,state.seq.length-1));
+  const names=["Helicase","Primase","DNA Pol III","Ligase","SSB"];
+  names.forEach((name,n)=>{
+    const p=dnaPoint(Math.min(state.seq.length-1,Math.max(0,fork-n*2)),n%2?1:-1,8.5);
+    sphere(p, .85, mat([0x38bdf8,0x22c55e,0xf59e0b,0xef4444,0xffffff][n]), {type:"enzyme",id:name}, processGroup);
+  });
+  labelProcess("복제 포크에서 효소들이 실제로 이동 중",new THREE.Vector3(0,12,8));
+}
+
+function buildMutationMarker(){
+  const i=Math.floor(((Math.sin(state.time*1.2)+1)/2)*Math.max(1,state.seq.length-1));
+  const p=state.mode==="DNA"?dnaPoint(i,1,2.2):rnaPoint(i,state.seq.length,state.rnaShape);
+  sphere(p.clone().add(new THREE.Vector3(0,0,2)),1.2,mat(0xef4444,.45),{type:"mutation",id:"돌연변이 위치"},processGroup);
+  labelProcess("돌연변이 위치가 강조되고 구조가 흔들립니다",new THREE.Vector3(0,12,8));
+}
+
+function labelProcess(text,pos){
+  const canvas=document.createElement("canvas");
+  canvas.width=512; canvas.height=96;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="rgba(2,6,23,.72)";
+  ctx.fillRect(0,0,512,96);
+  ctx.fillStyle="#f8fafc";
+  ctx.font="bold 26px Malgun Gothic, sans-serif";
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.fillText(text,256,48);
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(canvas),transparent:true}));
+  sprite.position.copy(pos);
+  sprite.scale.set(16,3,1);
+  processGroup.add(sprite);
+}
+
+function showBaseDetail(letter){
+  clear(detailGroup);
+  const data=Bases[letter];
+  const atomMat=mat(data.color);
+  const nMat=mat(0x60a5fa);
+  const oMat=mat(0xef4444);
+  const hMat=mat(0xffffff);
+  const bond=mat(0xe2e8f0);
+
+  detailGroup.position.set(15,0,0);
+  detailGroup.rotation.set(0,0,0);
+
+  const ringCount=data.kind==="퓨린"?6:5;
+  const ring=[];
+  for(let i=0;i<ringCount;i++){
+    const a=i*Math.PI*2/ringCount;
+    const p=new THREE.Vector3(Math.cos(a)*2.1,Math.sin(a)*2.1,0);
+    ring.push(p);
+    sphere(p,.42,i%3===0?nMat:atomMat,{type:"detail-atom",id:data.ko},detailGroup);
+  }
+  for(let i=0;i<ring.length;i++)tube(ring[i],ring[(i+1)%ring.length],.08,bond,detailGroup);
+
+  if(data.kind==="퓨린"){
+    const ring2=[];
+    for(let i=0;i<5;i++){
+      const a=i*Math.PI*2/5+.25;
+      const p=new THREE.Vector3(2.7+Math.cos(a)*1.55,Math.sin(a)*1.55,0);
+      ring2.push(p);
+      sphere(p,.36,i%2?nMat:atomMat,{type:"detail-atom",id:data.ko},detailGroup);
+    }
+    for(let i=0;i<ring2.length;i++)tube(ring2[i],ring2[(i+1)%ring2.length],.07,bond,detailGroup);
+  }
+
+  sphere(new THREE.Vector3(-3.4,0,0),.32,oMat,{type:"functional",id:"작용기"},detailGroup);
+  tube(new THREE.Vector3(-2.1,0,0),new THREE.Vector3(-3.4,0,0),.07,bond,detailGroup);
+  sphere(new THREE.Vector3(0,3.2,0),.25,hMat,{type:"hydrogen",id:"수소결합 자리"},detailGroup);
+  tube(new THREE.Vector3(0,2.1,0),new THREE.Vector3(0,3.2,0),.05,bond,detailGroup);
+
+  labelDetail(`${letter} ${data.ko} 확대 모델`,new THREE.Vector3(0,-4.2,0),data.color);
+}
+
+function labelDetail(text,pos,color){
+  const canvas=document.createElement("canvas");
+  canvas.width=512; canvas.height=90;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="rgba(2,6,23,.78)";
+  ctx.fillRect(0,0,512,90);
+  ctx.fillStyle="#"+color.toString(16).padStart(6,"0");
+  ctx.font="bold 28px Malgun Gothic, sans-serif";
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.fillText(text,256,45);
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(canvas),transparent:true}));
+  sprite.position.copy(pos);
+  sprite.scale.set(11,2,1);
+  detailGroup.add(sprite);
+}
+
+function updateInfoDefault(){
+  document.getElementById("info").innerHTML=`
+    <h2>${state.mode} 구조 (${state.mode==="DNA"?state.dnaShape:state.rnaShape})</h2>
+    <p>${state.mode==="DNA"
+      ?"선택된 DNA 형태 규격에 맞춰 상보적 염기쌍, 수소결합, 염기 stacking, 메이저/마이너 그루브를 렌더링합니다."
+      :"RNA는 단일가닥 구조이며 선택한 종류(mRNA, tRNA, rRNA, miRNA)에 맞춰 형상이 자동 배치됩니다."}</p>
+  `;
+}
+
+function updateInfoForObject(data){
+  const box=document.getElementById("info");
+  if(data.base){
+    const b=Bases[data.base];
+    box.innerHTML=`
+      <h2>${data.base} ${b.ko}</h2>
+      <p>${b.en} / ${b.formula}</p>
+      <div class="segment"><b>구조:</b> ${b.kind}, 상보 염기 ${b.pair}, 수소결합 ${b.hb}개</div>
+      <div class="segment"><b>현재 위치:</b> ${data.index}번, ${data.strand||"선택 가닥"}</div>
+      <div class="segment"><b>설명:</b> ${b.role}</div>
+    `;
+    showBaseDetail(data.base);
+  }else{
+    box.innerHTML=`
+      <h2>${data.id||data.type}</h2>
+      <div class="segment">선택한 구조 요소가 3D 장면에서 강조되었습니다.</div>
+    `;
+  }
+}
+
+function bindUI(){
+  btnDNA.onclick=()=>{
+    state.mode="DNA";
+    state.seq=state.seq.replace(/U/g,"T");
+    btnDNA.classList.add("active");
+    btnRNA.classList.remove("active");
+    document.getElementById("dnaShapeGroup").style.display="block";
+    document.getElementById("rnaShapeGroup").style.display="none";
+    build();
+  };
+  
+  btnRNA.onclick=()=>{
+    state.mode="RNA";
+    state.seq=state.seq.replace(/T/g,"U");
+    btnRNA.classList.add("active");
+    btnDNA.classList.remove("active");
+    document.getElementById("dnaShapeGroup").style.display="none";
+    document.getElementById("rnaShapeGroup").style.display="block";
+    build();
+  };
+
+  play.onclick=()=>{state.playing=true;play.classList.add("active");pause.classList.remove("active")};
+  pause.onclick=()=>{state.playing=false;pause.classList.add("active");play.classList.remove("active")};
+  auto.onclick=()=>{state.auto=!state.auto;auto.classList.toggle("active",state.auto)};
+  reset.onclick=()=>{
+    state.rotX=0;state.rotY=0;state.panX=0;state.panY=0;state.zoom=48;state.action="none";
+    state.activeFilter=null;
+    document.querySelectorAll(".badge").forEach(b=>b.classList.remove("active"));
+    build();
+  };
+  
+  speed.oninput=e=>state.speed=Number(e.target.value);
+  
+  dnaShape.onchange=e=>{state.dnaShape=e.target.value; build();};
+  rnaShape.onchange=e=>{state.rnaShape=e.target.value; build();};
+  
+  applySeq.onclick=()=>{state.seq=seq.value;build()};
+  randomSeq.onclick=()=>{
+    const pool=state.mode==="RNA"?"AUGC":"ATGC";
+    state.seq=Array.from({length:36},()=>pool[Math.floor(Math.random()*4)]).join("");
+    build();
+  };
+
+  document.querySelectorAll("[data-action]").forEach(btn=>{
+    btn.onclick=()=>{
+      state.action=btn.dataset.action;
+      document.querySelectorAll("[data-action]").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      toast(btn.textContent+" 시뮬레이션을 시작합니다.");
+      build();
+    };
+  });
+
+  document.querySelectorAll(".badge").forEach(badge=>{
+    badge.onclick=()=>{
+      const targetFilter = badge.dataset.filter;
+      if(state.activeFilter === targetFilter){
+        state.activeFilter = null;
+        badge.classList.remove("active");
+      } else {
+        document.querySelectorAll(".badge").forEach(b=>b.classList.remove("active"));
+        state.activeFilter = targetFilter;
+        badge.classList.add("active");
+      }
+      build();
+    };
+  });
+}
+
+function bindMouse(){
+  const dom=renderer.domElement;
+  dom.addEventListener("contextmenu",e=>e.preventDefault());
+  dom.addEventListener("mousedown",e=>{
+    state.drag=e.button===0;
+    state.panDrag=e.button===2;
+    state.lastX=e.clientX; state.lastY=e.clientY;
+  });
+  window.addEventListener("mouseup",()=>{state.drag=false;state.panDrag=false});
+  window.addEventListener("mousemove",e=>{
+    const dx=e.clientX-state.lastX;
+    const dy=e.clientY-state.lastY;
+    if(state.drag){
+      state.rotY+=dx*.008;
+      state.rotX+=dy*.008;
+    }
+    if(state.panDrag){
+      state.panX+=dx*.035;
+      state.panY-=dy*.035;
+    }
+    state.lastX=e.clientX; state.lastY=e.clientY;
+  });
+  
+  dom.addEventListener("wheel",e=>{
+    e.preventDefault();
+    state.zoom += e.deltaY * 0.04; 
+    state.zoom = Math.max(2, Math.min(95, state.zoom));
+  },{passive:false});
+
+  dom.addEventListener("click",e=>{
+    mouse.x=e.clientX/innerWidth*2-1;
+    mouse.y=-(e.clientY/innerHeight)*2+1;
+    raycaster.setFromCamera(mouse,camera);
+    const hit=raycaster.intersectObjects(clickable,true)[0];
+    if(hit){
+      if(selected && selected.material && selected.userData.base)selected.material.emissive.setHex(0x000000);
+      selected=hit.object;
+      if(selected.material && selected.userData.base)selected.material.emissive.setHex(0x333333);
+      updateInfoForObject(selected.userData);
+    }
+  });
+}
+
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg;
+  t.classList.add("show");
+  clearTimeout(toast.id);
+  toast.id=setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+function resize(){
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+}
+window.addEventListener("resize",resize);
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(state.playing){
+    state.time+=.016*state.speed;
+    clock.textContent=state.time.toFixed(2)+" ns";
+  }
+  if(state.auto)state.rotY+=.006;
+
+  mainGroup.rotation.x=state.rotX+Math.sin(state.time*.7)*.025;
+  mainGroup.rotation.y=state.rotY;
+  mainGroup.position.set(state.panX,state.panY,0);
+
+  detailGroup.rotation.y+=state.playing?.012*state.speed:0;
+
+  if(state.action!=="none" && state.playing){
+    clear(processGroup);
+    buildAction();
+  }
+
+  camera.fov = state.zoom;
+  camera.updateProjectionMatrix();
+  
+  camera.lookAt(state.panX,state.panY,0);
+  renderer.render(scene,camera);
+}
+</script>
+</body>
+</html>
