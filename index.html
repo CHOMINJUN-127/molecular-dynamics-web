@@ -22,7 +22,7 @@
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020617;color:var(--text);font-family:system-ui,"Malgun Gothic",sans-serif}
 #viewport{position:fixed;inset:0}
 .glass{position:fixed;z-index:10;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(18px);border-radius:10px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
-#header{top:14px;left:14px;right:340px;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 18px}
+#header{top:14px;left:14px;right:340px;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;transition: right 0.1s ease;}
 #header h1{margin:0;font-size:18px;font-weight:800;color:#f8fafc}
 
 /* 우측 상단 페이지 이동 버튼 그룹 스타일 */
@@ -34,6 +34,29 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020617;col
 /* 우측 링크 버튼 때문에 상단 겹침 방지를 위해 top 위치를 92px에서 160px로 조정 */
 #right{top:160px;right:14px;bottom:92px;width:310px;padding:16px;overflow:auto}
 #bottom{left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:10px 14px}
+
+/* 리사이저 스타일 추가 */
+.resizer {
+  position: fixed;
+  z-index: 15;
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.2s;
+}
+.resizer:hover, .resizer.dragging {
+  background: rgba(56, 189, 248, 0.4);
+}
+#left-resizer {
+  top: 92px;
+  bottom: 92px;
+  left: 324px; /* #left width(310) + left(14) */
+}
+#right-resizer {
+  top: 160px;
+  bottom: 92px;
+  right: 324px; /* #right width(310) + right(14) */
+}
 
 .group{border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:14px;margin-bottom:14px}
 .group:last-child{border-bottom:0;margin-bottom:0}
@@ -58,6 +81,7 @@ input[type=range]{accent-color:var(--accent)}
   #header,#navGroup,#left,#right,#bottom{position:relative;inset:auto;transform:none;width:auto;margin:10px}
   body{overflow:auto}
   #viewport{position:fixed}
+  .resizer { display: none !important; }
 }
 </style>
 </head>
@@ -77,6 +101,8 @@ input[type=range]{accent-color:var(--accent)}
   <button onclick="location.href='생명.html'">2</button>
   <button onclick="location.href='세포막.html'">3</button>
 </div>
+
+<div id="left-resizer" class="resizer"></div>
 
 <aside id="left" class="glass">
   <div class="group">
@@ -139,6 +165,8 @@ input[type=range]{accent-color:var(--accent)}
     </div>
   </div>
 </aside>
+
+<div id="right-resizer" class="resizer"></div>
 
 <aside id="right" class="glass">
   <div id="info">
@@ -232,6 +260,7 @@ function init(){
 
   bindUI();
   bindMouse();
+  initResizers(); // 리사이저 이벤트 초기화 함수 추가
   build();
   animate();
 }
@@ -750,6 +779,60 @@ function bindMouse(){
       updateInfoForObject(selected.userData);
     }
   });
+}
+
+/* 마우스 드래그 가로 리사이징 기능 로직 추가 */
+function initResizers() {
+  const leftSide = document.getElementById("left");
+  const leftResizer = document.getElementById("left-resizer");
+  const rightSide = document.getElementById("right");
+  const rightResizer = document.getElementById("right-resizer");
+  const header = document.getElementById("header");
+
+  // 좌측 사이드바 조절
+  leftResizer.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    leftResizer.classList.add("dragging");
+    document.addEventListener("mousemove", resizeLeft);
+    document.addEventListener("mouseup", stopResizeLeft);
+  });
+
+  function resizeLeft(e) {
+    let width = e.clientX - 14; // 여백 제외 크기 계산
+    if (width > 180 && width < 500) { // 최소/최대 폭 제어
+      leftSide.style.width = width + "px";
+      leftResizer.style.left = (width + 14) + "px";
+    }
+  }
+
+  function stopResizeLeft() {
+    leftResizer.classList.remove("dragging");
+    document.removeEventListener("mousemove", resizeLeft);
+    document.removeEventListener("mouseup", stopResizeLeft);
+  }
+
+  // 우측 사이드바 조절
+  rightResizer.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    rightResizer.classList.add("dragging");
+    document.addEventListener("mousemove", resizeRight);
+    document.addEventListener("mouseup", stopResizeRight);
+  });
+
+  function resizeRight(e) {
+    let width = window.innerWidth - e.clientX - 14;
+    if (width > 180 && width < 500) { // 최소/최대 폭 제어
+      rightSide.style.width = width + "px";
+      rightResizer.style.right = (width + 14) + "px";
+      header.style.right = (width + 30) + "px"; // 헤더 영역도 겹치지 않게 동적 조절
+    }
+  }
+
+  function stopResizeRight() {
+    rightResizer.classList.remove("dragging");
+    document.removeEventListener("mousemove", resizeRight);
+    document.removeEventListener("mouseup", stopResizeRight);
+  }
 }
 
 function toast(msg){
